@@ -29,6 +29,7 @@ CSV_PATH = ROOT / "titanic.csv"
 RANDOM_STATE = 42
 
 
+# STEP 1: Load the Titanic dataset only once.
 def load_once() -> pd.DataFrame:
     if CSV_PATH.exists():
         return pd.read_csv(CSV_PATH)
@@ -37,6 +38,7 @@ def load_once() -> pd.DataFrame:
     return df
 
 
+# STEP 2: Apply the missing-value percentage rules from the assignment.
 def missing_strategy(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     cleaned = df.copy()
     notes = []
@@ -59,12 +61,14 @@ def missing_strategy(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     return cleaned, notes
 
 
+# STEP 3: Count outliers with the IQR rule.
 def outlier_count(series: pd.Series) -> int:
     q1, q3 = series.quantile([0.25, 0.75])
     iqr = q3 - q1
     return int(((series < q1 - 1.5 * iqr) | (series > q3 + 1.5 * iqr)).sum())
 
 
+# STEPS 4–6: Create EDA charts and collect their written observations.
 def save_eda(df: pd.DataFrame) -> list[str]:
     CHARTS.mkdir(exist_ok=True)
     notes = []
@@ -72,14 +76,18 @@ def save_eda(df: pd.DataFrame) -> list[str]:
         fig, axes = plt.subplots(1, 2, figsize=(10, 4))
         sns.histplot(data=df, x=col, kde=True, ax=axes[0])
         sns.boxplot(data=df, x=col, ax=axes[1])
-        fig.tight_layout(); fig.savefig(CHARTS / f"{col}_distribution.png"); plt.close(fig)
+        fig.tight_layout()
+        fig.savefig(CHARTS / f"{col}_distribution.png")
+        plt.close(fig)
         notes.append(f"- `{col}` IQR outliers: **{outlier_count(df[col].dropna())}**.")
 
     numeric = ["survived", "pclass", "age", "sibsp", "parch", "fare"]
     corr = df[numeric].corr()
     fig, ax = plt.subplots(figsize=(8, 6))
     sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", center=0, ax=ax)
-    fig.tight_layout(); fig.savefig(CHARTS / "correlation_heatmap.png"); plt.close(fig)
+    fig.tight_layout()
+    fig.savefig(CHARTS / "correlation_heatmap.png")
+    plt.close(fig)
     pairs = corr.where(np.triu(np.ones(corr.shape), 1).astype(bool)).stack()
     strongest = pairs.reindex(pairs.abs().sort_values(ascending=False).index).head(2)
     notes.extend([f"- Strong correlation: `{a}` and `{b}` = **{v:.3f}**." for (a, b), v in strongest.items()])
@@ -95,11 +103,16 @@ def save_eda(df: pd.DataFrame) -> list[str]:
          "Age, fare, class and survival overlap rather than forming a perfect boundary, supporting multivariate modeling."),
     ]
     for name, draw, interpretation in charts:
-        fig, ax = plt.subplots(figsize=(7, 4)); draw(ax); fig.tight_layout(); fig.savefig(CHARTS / name); plt.close(fig)
+        fig, ax = plt.subplots(figsize=(7, 4))
+        draw(ax)
+        fig.tight_layout()
+        fig.savefig(CHARTS / name)
+        plt.close(fig)
         notes.append(f"- `{name}`: {interpretation}")
     return notes
 
 
+# STEP 7: Build one reusable preprocessing + model pipeline.
 def classifier_pipeline(model):
     numeric = ["pclass", "age", "sibsp", "parch", "fare"]
     categorical = ["sex", "embarked"]
@@ -111,6 +124,7 @@ def classifier_pipeline(model):
     return Pipeline([("preprocessor", preprocessor), ("model", model)])
 
 
+# STEP 8: Calculate all required classification metrics.
 def metrics_for(model, x_test, y_test) -> dict:
     pred = model.predict(x_test)
     prob = model.predict_proba(x_test)[:, 1]
@@ -122,6 +136,7 @@ def metrics_for(model, x_test, y_test) -> dict:
 
 
 def main() -> None:
+    # PART A — LOAD, PROFILE AND CLEAN
     raw = load_once()
     raw.info()
     print(raw.describe(include="all"))
@@ -134,8 +149,16 @@ def main() -> None:
     fare = cleaned["fare"]
     report.append(f"- Fare mean={fare.mean():.3f}, median={fare.median():.3f}, mode={fare.mode().iloc[0]:.3f}. "
                   "Mean above median/mode indicates a right-skewed distribution.")
-    sex_rates = {sex: cleaned.loc[cleaned["sex"] == sex, "survived"].mean() for sex in cleaned["sex"].dropna().unique()}
-    class_rates = {int(cls): cleaned.loc[cleaned["pclass"] == cls, "survived"].mean() for cls in sorted(cleaned["pclass"].unique())}
+    # Boolean masking for survival-rate calculations.
+    sex_rates = {}
+    for sex in cleaned["sex"].dropna().unique():
+        mask = cleaned["sex"] == sex
+        sex_rates[sex] = cleaned.loc[mask, "survived"].mean()
+
+    class_rates = {}
+    for passenger_class in sorted(cleaned["pclass"].unique()):
+        mask = cleaned["pclass"] == passenger_class
+        class_rates[int(passenger_class)] = cleaned.loc[mask, "survived"].mean()
     combined_rates = []
     for sex in cleaned["sex"].dropna().unique():
         for cls in sorted(cleaned["pclass"].unique()):
@@ -145,13 +168,17 @@ def main() -> None:
                pd.Series(class_rates, name="survival_rate").to_markdown(), "",
                pd.DataFrame(combined_rates).to_markdown(index=False)]
 
+    # This full-data scaling is only an EDA demonstration.
     standardized = StandardScaler().fit_transform(cleaned[["age", "fare"]])
     std_summary = pd.DataFrame(standardized, columns=["age_z", "fare_z"]).agg(["mean", "std"])
     report += ["", "## EDA standardization check", std_summary.to_markdown(),
                "Values are approximately mean 0 and standard deviation 1 (minor difference comes from sample-vs-population std conventions)."]
 
+    # PART B — CLASSIFICATION
+    # Split first. The pipeline learns preprocessing from training data only.
     features = ["pclass", "age", "sibsp", "parch", "fare", "sex", "embarked"]
-    x, y = raw[features], raw["survived"]
+    x = raw[features]
+    y = raw["survived"]
     x_train, x_test, y_train, y_test = train_test_split(
         x, y, test_size=0.2, random_state=RANDOM_STATE, stratify=y
     )
@@ -166,27 +193,44 @@ def main() -> None:
     for name, estimator in candidates.items():
         pipe = classifier_pipeline(estimator).fit(x_train, y_train)
         fitted[name], scores[name] = pipe, metrics_for(pipe, x_test, y_test)
-        fig, ax = plt.subplots(figsize=(4, 4)); ConfusionMatrixDisplay.from_estimator(pipe, x_test, y_test, ax=ax)
-        fig.tight_layout(); fig.savefig(CHARTS / f"{name.lower().replace(' ', '_')}_confusion.png"); plt.close(fig)
+        fig, ax = plt.subplots(figsize=(4, 4))
+        ConfusionMatrixDisplay.from_estimator(pipe, x_test, y_test, ax=ax)
+        fig.tight_layout()
+        fig.savefig(CHARTS / f"{name.lower().replace(' ', '_')}_confusion.png")
+        plt.close(fig)
     comparison = pd.DataFrame(scores).T
     report += ["", "### Classifier comparison", comparison.to_markdown(floatfmt=".4f")]
 
     fig, ax = plt.subplots(figsize=(6, 5))
-    for name, pipe in fitted.items(): RocCurveDisplay.from_estimator(pipe, x_test, y_test, name=name, ax=ax)
-    fig.tight_layout(); fig.savefig(CHARTS / "roc_curves.png"); plt.close(fig)
+    for name, pipe in fitted.items():
+        RocCurveDisplay.from_estimator(pipe, x_test, y_test, name=name, ax=ax)
+    fig.tight_layout()
+    fig.savefig(CHARTS / "roc_curves.png")
+    plt.close(fig)
 
     tree_pipe = fitted["Decision Tree"]
     names = tree_pipe.named_steps["preprocessor"].get_feature_names_out()
-    fig, ax = plt.subplots(figsize=(24, 10)); plot_tree(tree_pipe.named_steps["model"], feature_names=names,
-        class_names=["not survived", "survived"], filled=True, max_depth=3, ax=ax)
-    fig.tight_layout(); fig.savefig(CHARTS / "decision_tree.png"); plt.close(fig)
+    fig, ax = plt.subplots(figsize=(24, 10))
+    plot_tree(
+        tree_pipe.named_steps["model"],
+        feature_names=names,
+        class_names=["not survived", "survived"],
+        filled=True,
+        max_depth=3,
+        ax=ax,
+    )
+    fig.tight_layout()
+    fig.savefig(CHARTS / "decision_tree.png")
+    plt.close(fig)
 
     imbalance = {}
     for label, weight in [("baseline", None), ("class_weight_balanced", "balanced")]:
         pipe = classifier_pipeline(LogisticRegression(max_iter=1000, class_weight=weight, random_state=RANDOM_STATE)).fit(x_train, y_train)
         imbalance[label] = {k: v for k, v in metrics_for(pipe, x_test, y_test).items() if k in ["precision", "recall", "f1"]}
+    # Fit SMOTE preprocessing on training data and transform test data only.
     prep = classifier_pipeline(LogisticRegression()).named_steps["preprocessor"]
-    xt = prep.fit_transform(x_train); xv = prep.transform(x_test)
+    xt = prep.fit_transform(x_train)
+    xv = prep.transform(x_test)
     xt_smote, yt_smote = SMOTE(random_state=RANDOM_STATE).fit_resample(xt, y_train)
     smote_model = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE).fit(xt_smote, yt_smote)
     smote_pred = smote_model.predict(xv)
@@ -204,6 +248,7 @@ def main() -> None:
     report += ["", "### Random Forest tuning", f"Best parameters: `{grid.best_params_}`",
                f"OOB score: **{grid.best_estimator_.named_steps['model'].oob_score_:.4f}**"]
 
+    # PART C — REGRESSION: predict fare.
     reg_features = ["pclass", "age", "sibsp", "parch", "survived", "sex", "embarked"]
     rx_train, rx_test, ry_train, ry_test = train_test_split(raw[reg_features], raw["fare"], test_size=0.2, random_state=RANDOM_STATE)
     reg_num, reg_cat = reg_features[:-2], ["sex", "embarked"]
@@ -213,16 +258,30 @@ def main() -> None:
                            ("encode", OneHotEncoder(handle_unknown="ignore", sparse_output=False))]), reg_cat),
     ])
     reg = Pipeline([("preprocessor", reg_prep), ("model", LinearRegression())]).fit(rx_train, ry_train)
-    rpred = reg.predict(rx_test); mae = mean_absolute_error(ry_test, rpred); rmse = math.sqrt(mean_squared_error(ry_test, rpred)); r2 = r2_score(ry_test, rpred)
-    n, p = len(ry_test), len(reg.named_steps["preprocessor"].get_feature_names_out()); adj = 1 - (1-r2)*(n-1)/(n-p-1)
-    fig, ax = plt.subplots(figsize=(6, 4)); ax.scatter(rpred, ry_test-rpred, alpha=.6); ax.axhline(0, color="red"); ax.set(xlabel="Predicted fare", ylabel="Residual")
-    fig.tight_layout(); fig.savefig(CHARTS / "fare_residuals.png"); plt.close(fig)
-    spread_corr = np.corrcoef(np.abs(ry_test-rpred), rpred)[0, 1]
+    rpred = reg.predict(rx_test)
+    mae = mean_absolute_error(ry_test, rpred)
+    rmse = math.sqrt(mean_squared_error(ry_test, rpred))
+    r2 = r2_score(ry_test, rpred)
+    n = len(ry_test)
+    p = len(reg.named_steps["preprocessor"].get_feature_names_out())
+    adj = 1 - (1 - r2) * (n - 1) / (n - p - 1)
+
+    residuals = ry_test - rpred
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.scatter(rpred, residuals, alpha=0.6)
+    ax.axhline(0, color="red")
+    ax.set(xlabel="Predicted fare", ylabel="Residual")
+    fig.tight_layout()
+    fig.savefig(CHARTS / "fare_residuals.png")
+    plt.close(fig)
+    spread_corr = np.corrcoef(np.abs(residuals), rpred)[0, 1]
     hetero = "suggests heteroscedasticity" if abs(spread_corr) >= 0.2 else "does not show strong evidence of heteroscedasticity"
     report += ["", "### Regression metrics", pd.DataFrame([{"MAE": mae, "RMSE": rmse, "R2": r2, "Adjusted R2": adj}]).to_markdown(index=False, floatfmt=".4f"),
                f"The residual plot {hetero}; correlation between absolute residual size and prediction is {spread_corr:.3f}."]
 
-    best_name = comparison["f1"].idxmax(); best_pipe = fitted[best_name]
+    # PART D — SAVE AND RELOAD THE COMPLETE BEST PIPELINE.
+    best_name = comparison["f1"].idxmax()
+    best_pipe = fitted[best_name]
     joblib.dump(best_pipe, ROOT / "best_classifier_pipeline.joblib")
     reloaded = joblib.load(ROOT / "best_classifier_pipeline.joblib")
     check = int(reloaded.predict(x_test.iloc[[0]])[0])
