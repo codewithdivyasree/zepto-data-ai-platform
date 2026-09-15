@@ -1,0 +1,125 @@
+MODULE 1 - SQL QUERY OUTPUTS
+========================================
+
+1. In-stock books
+SQL: SELECT title, price_inr FROM books WHERE in_stock = 1 LIMIT 10
+title | price_inr
+------------------------------------------------------------
+It's Only the Himalayas | 4765.44
+Full Moon over Noah’s Ark: An Odyssey to Mount Ararat and Beyond | 5214.86
+See America: A Celebration of Our National Parks & Treasured Sites | 5155.78
+Vagabonding: An Uncommon Guide to the Art of Long-Term World Travel | 3897.17
+Under the Tuscan Sun | 3938.31
+A Summer In Europe | 4677.87
+The Great Railway Bazaar | 3221.97
+A Year in Provence (Provence #1) | 6000.84
+The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2) | 2448.66
+Neither Here nor There: Travels in Europe | 4109.23
+
+2. Most expensive books
+SQL: SELECT title, price_gbp FROM books ORDER BY price_gbp DESC LIMIT 10
+title | price_gbp
+------------------------------------------------------------
+Boar Island (Anna Pigeon #19) | 59.48
+The No. 1 Ladies' Detective Agency (No. 1 Ladies' Detective Agency #1) | 57.7
+A Year in Provence (Provence #1) | 56.88
+The Past Never Ends | 56.5
+The Last Painting of Sara de Vos | 55.55
+A Flight of Arrows (The Pathfinders #2) | 55.53
+Murder at the 42nd Street Library (Raymond Ambler #1) | 54.36
+The Last Mile (Amos Decker #2) | 54.21
+1st to Die (Women's Murder Club #1) | 53.98
+Tipping the Velvet | 53.74
+
+3. Available ratings
+SQL: SELECT DISTINCT rating FROM books ORDER BY rating
+rating
+------------------------------------------------------------
+1
+2
+3
+4
+5
+
+4. Books priced between GBP 20 and GBP 40
+SQL: SELECT title, price_gbp FROM books WHERE price_gbp BETWEEN 20 AND 40 ORDER BY price_gbp LIMIT 20
+title | price_gbp
+------------------------------------------------------------
+Blood Defense (Samantha Brinkman #1) | 20.3
+Love, Lies and Spies | 20.55
+Between Shades of Gray | 20.79
+Delivering the Truth (Quaker Midwife Mystery #1) | 20.89
+Voyager (Outlander #3) | 21.07
+The Silkworm (Cormoran Strike #2) | 23.05
+The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2) | 23.21
+Career of Evil (Cormoran Strike #3) | 24.72
+The Mysterious Affair at Styles (Hercule Poirot #1) | 24.8
+What Happened on Beale Street (Secrets of the South Mysteries #2) | 25.37
+Extreme Prey (Lucas Davenport #26) | 25.4
+Starlark | 25.83
+1,000 Places to See Before You Die | 26.08
+Girl With a Pearl Earring | 26.77
+Poisonous (Max Revere Novels #3) | 26.8
+The Widow | 27.26
+Lost Among the Living | 27.7
+The Marriage of Opposites | 28.08
+The Passion of Dolssa | 28.32
+Forever and Forever: The Courtship of Henry Longfellow and Fanny Appleton | 29.69
+
+5. Books rated 4 or 5
+SQL: SELECT title, rating FROM books WHERE rating IN (4, 5) ORDER BY rating DESC LIMIT 20
+title | rating
+------------------------------------------------------------
+1,000 Places to See Before You Die | 5
+A Time of Torment (Charlie Parker #14) | 5
+What Happened on Beale Street (Secrets of the South Mysteries #2) | 5
+The Bachelor Girl's Guide to Murder (Herringford and Watts Mysteries #1) | 5
+The Silkworm (Cormoran Strike #2) | 5
+The Girl You Lost | 5
+A Flight of Arrows (The Pathfinders #2) | 5
+Mrs. Houdini | 5
+The Passion of Dolssa | 5
+Voyager (Outlander #3) | 5
+The Red Tent | 5
+Between Shades of Gray | 5
+While You Were Mine | 5
+A Spy's Devotion (The Regency Spies of London #1) | 5
+Full Moon over Noah’s Ark: An Odyssey to Mount Ararat and Beyond | 4
+A Year in Provence (Provence #1) | 4
+Sharp Objects | 4
+The Past Never Ends | 4
+The Murder of Roger Ackroyd (Hercule Poirot #4) | 4
+Murder at the 42nd Street Library (Raymond Ambler #1) | 4
+
+6. Books joined with categories
+SQL: SELECT b.title, c.category_name FROM books b JOIN categories c ON b.category_id = c.category_id LIMIT 20
+title | category_name
+------------------------------------------------------------
+It's Only the Himalayas | Travel
+Full Moon over Noah’s Ark: An Odyssey to Mount Ararat and Beyond | Travel
+See America: A Celebration of Our National Parks & Treasured Sites | Travel
+Vagabonding: An Uncommon Guide to the Art of Long-Term World Travel | Travel
+Under the Tuscan Sun | Travel
+A Summer In Europe | Travel
+The Great Railway Bazaar | Travel
+A Year in Provence (Provence #1) | Travel
+The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2) | Travel
+Neither Here nor There: Travels in Europe | Travel
+1,000 Places to See Before You Die | Travel
+Sharp Objects | Mystery
+In a Dark, Dark Wood | Mystery
+The Past Never Ends | Mystery
+A Murder in Time | Mystery
+The Murder of Roger Ackroyd (Hercule Poirot #4) | Mystery
+The Last Mile (Amos Decker #2) | Mystery
+That Darkness (Gardiner and Renner #1) | Mystery
+Tastes Like Fear (DI Marnie Rome #3) | Mystery
+A Time of Torment (Charlie Parker #14) | Mystery
+
+VALIDATION
+========================================
+Books: 69
+Categories: 3
+Foreign-key violations: 0
+Text-encoding issues: 0
+SQL JOIN and pandas.merge equivalent: True
