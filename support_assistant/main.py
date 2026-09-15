@@ -37,6 +37,7 @@ class AssistantState(TypedDict, total=False):
 KEYWORDS = ("delivery", "return", "refund", "membership", "tracking", "cancel", "gift card", "support hours")
 
 
+# MOCK_LLM=1 is the free, offline and graded default.
 def mock_mode() -> bool:
     return os.getenv("MOCK_LLM", "1") != "0"
 
@@ -57,16 +58,22 @@ def parse_real_response(prompt: str) -> AskResponse:
     return AskResponse(answer=f"ERROR: Real-LLM output failed validation: {last_error}", sources=[], confidence=0.0)
 
 
+# NODE 1: Decide whether the question needs policy retrieval.
 def classify_intent(state: AssistantState) -> AssistantState:
     query = state["query"].lower()
     if mock_mode():
-        intent = "policy_question" if any(word in query for word in KEYWORDS) else "general_question"
+        contains_policy_word = any(word in query for word in KEYWORDS)
+        if contains_policy_word:
+            intent = "policy_question"
+        else:
+            intent = "general_question"
     else:
         result = parse_real_response("Classify as policy_question or general_question: " + state["query"])
         intent = "policy_question" if "policy_question" in result.answer else "general_question"
     return {"intent": intent}
 
 
+# NODE 2: Retrieve the top three chunks and answer from the best chunk.
 def retrieve_and_answer(state: AssistantState) -> AssistantState:
     collection = get_collection()
     if collection.count() < 8:
@@ -75,12 +82,23 @@ def retrieve_and_answer(state: AssistantState) -> AssistantState:
     docs = result["documents"][0]
     ids = result["ids"][0]
     if mock_mode():
-        return {"answer": f"Based on the retrieved context: {docs[0][:200]}", "sources": ids, "confidence": 1.0}
-    context = "\n".join(f"[{doc_id}] {text}" for doc_id, text in zip(ids, docs))
+        top_chunk_snippet = docs[0][:200]
+        answer = f"Based on the retrieved context: {top_chunk_snippet}"
+        return {
+            "answer": answer,
+            "sources": ids,
+            "confidence": 1.0,
+        }
+
+    context_lines = []
+    for document_id, document_text in zip(ids, docs):
+        context_lines.append(f"[{document_id}] {document_text}")
+    context = "\n".join(context_lines)
     response = parse_real_response(POLICY_PROMPT.format(context=context, query=state["query"]))
     return response.model_dump()
 
 
+# NODE 3: Return a fixed scope message for unrelated questions.
 def direct_answer(state: AssistantState) -> AssistantState:
     if mock_mode():
         return {"answer": "I can only answer questions about Zepto policies right now.", "sources": [], "confidence": 1.0}
@@ -88,10 +106,12 @@ def direct_answer(state: AssistantState) -> AssistantState:
     return response.model_dump()
 
 
+# Conditional-edge routing function.
 def route(state: AssistantState) -> str:
     return state["intent"]
 
 
+# Build and compile the three-node LangGraph workflow.
 builder = StateGraph(AssistantState)
 builder.add_node("classify_intent", classify_intent)
 builder.add_node("retrieve_and_answer", retrieve_and_answer)
@@ -115,5 +135,8 @@ def health():
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest) -> AskResponse:
     state = graph.invoke({"query": request.query})
-    return AskResponse(answer=state["answer"], sources=state["sources"], confidence=state["confidence"])
-
+    return AskResponse(
+        answer=state["answer"],
+        sources=state["sources"],
+        confidence=state["confidence"],
+    )
