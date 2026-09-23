@@ -90,17 +90,28 @@ def save_eda(df: pd.DataFrame) -> list[str]:
     plt.close(fig)
     pairs = corr.where(np.triu(np.ones(corr.shape), 1).astype(bool)).stack()
     strongest = pairs.reindex(pairs.abs().sort_values(ascending=False).index).head(2)
-    notes.extend([f"- Strong correlation: `{a}` and `{b}` = **{v:.3f}**." for (a, b), v in strongest.items()])
+    correlation_meanings = {
+        frozenset(("pclass", "fare")): "The negative sign means higher-numbered passenger classes generally paid lower fares, so fare also captures part of the socioeconomic class effect.",
+        frozenset(("sibsp", "parch")): "The positive relationship shows that passengers travelling with siblings or spouses were also more likely to travel with parents or children, reflecting family-group travel.",
+    }
+    for (a, b), value in strongest.items():
+        meaning = correlation_meanings.get(
+            frozenset((a, b)),
+            "This association describes how the two measured features move together, but it does not by itself establish causation.",
+        )
+        notes.append(
+            f"- Strong correlation: `{a}` and `{b}` = **{value:.3f}**. {meaning}"
+        )
 
     charts = [
         ("survival_by_sex.png", lambda ax: sns.barplot(data=df, x="sex", y="survived", ax=ax),
-         "Women show a higher average survival rate than men, indicating sex was strongly associated with survival."),
+         "Women show a substantially higher average survival rate than men. This indicates that sex was strongly associated with access to rescue and should be considered an important predictive feature."),
         ("survival_by_class.png", lambda ax: sns.barplot(data=df, x="pclass", y="survived", ax=ax),
-         "First-class passengers have a higher survival rate than lower classes, suggesting access and location mattered."),
+         "First-class passengers have the highest survival rate, followed by second and third class. The steady decline suggests that cabin location, access to lifeboats, and socioeconomic status influenced survival."),
         ("fare_by_survival.png", lambda ax: sns.boxplot(data=df, x="survived", y="fare", ax=ax),
-         "Survivors generally paid higher fares, which overlaps with the class effect."),
+         "Survivors generally paid higher fares than non-survivors. Because fares and passenger class are strongly related, this pattern supports the conclusion that class-related access affected survival."),
         ("age_class_survival.png", lambda ax: sns.scatterplot(data=df, x="age", y="fare", hue="survived", style="pclass", ax=ax),
-         "Age, fare, class and survival overlap rather than forming a perfect boundary, supporting multivariate modeling."),
+         "Age, fare, passenger class, and survival overlap rather than forming a perfect decision boundary. Higher-fare passengers contain more survivors, but age and class interactions show that no single feature explains every outcome, supporting multivariate modeling."),
     ]
     for name, draw, interpretation in charts:
         fig, ax = plt.subplots(figsize=(7, 4))
@@ -276,7 +287,8 @@ def main() -> None:
     plt.close(fig)
     spread_corr = np.corrcoef(np.abs(residuals), rpred)[0, 1]
     hetero = "suggests heteroscedasticity" if abs(spread_corr) >= 0.2 else "does not show strong evidence of heteroscedasticity"
-    report += ["", "### Regression metrics", pd.DataFrame([{"MAE": mae, "RMSE": rmse, "R2": r2, "Adjusted R2": adj}]).to_markdown(index=False, floatfmt=".4f"),
+    regression_comparison = pd.DataFrame([{"Model": "Linear Regression", "MAE": mae, "RMSE": rmse, "R2": r2, "Adjusted R2": adj}])
+    report += ["", "### Regression metrics", regression_comparison.to_markdown(index=False, floatfmt=".4f"),
                f"The residual plot {hetero}; correlation between absolute residual size and prediction is {spread_corr:.3f}."]
 
     # PART D — SAVE AND RELOAD THE COMPLETE BEST PIPELINE.
@@ -285,7 +297,11 @@ def main() -> None:
     joblib.dump(best_pipe, ROOT / "best_classifier_pipeline.joblib")
     reloaded = joblib.load(ROOT / "best_classifier_pipeline.joblib")
     check = int(reloaded.predict(x_test.iloc[[0]])[0])
-    report += ["", "## Recommendation", f"Deploy **{best_name}** because it has the highest test F1 ({comparison.loc[best_name, 'f1']:.4f}) while achieving AUC {comparison.loc[best_name, 'auc']:.4f}. "
+    report += ["", "## Final model comparison",
+               "Classification metrics and regression metrics are reported as separate groups because they measure different tasks and are not directly comparable.",
+               "### Classification models", comparison.to_markdown(floatfmt=".4f"),
+               "### Regression model", regression_comparison.to_markdown(index=False, floatfmt=".4f"),
+               "", "## Recommendation", f"Deploy **{best_name}** because it has the highest test F1 ({comparison.loc[best_name, 'f1']:.4f}) while achieving AUC {comparison.loc[best_name, 'auc']:.4f}. "
                "F1 balances precision and recall, making it more informative than accuracy alone for the minority survived class. "
                "The final choice should still be monitored for subgroup fairness and drift.",
                f"Reloaded raw-input prediction check succeeded: `{check}`."]

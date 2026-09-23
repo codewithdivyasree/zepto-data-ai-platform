@@ -31,10 +31,30 @@ Policy example:
 {"query": "What is the delivery fee?"}
 ```
 
+Raw mock-mode response:
+
+```json
+{
+  "answer": "Based on the retrieved context: Zepto delivers grocery and household essentials to serviceable pin codes within 10 to 30 minutes of order confirmation, depending on the customer's delivery zone and current order volume. Standard del",
+  "sources": ["doc_01", "doc_05", "doc_02"],
+  "confidence": 1.0
+}
+```
+
 General example:
 
 ```json
 {"query": "Who invented Python?"}
+```
+
+Raw mock-mode response:
+
+```json
+{
+  "answer": "I can only answer questions about Zepto policies right now.",
+  "sources": [],
+  "confidence": 1.0
+}
 ```
 
 Both responses follow the validated schema `answer`, `sources`, and `confidence`. `MOCK_LLM=1` is the default graded path and makes no LLM API call.

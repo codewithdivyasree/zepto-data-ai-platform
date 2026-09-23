@@ -153,7 +153,16 @@ def run_queries(db_path: Path, clean_df: pd.DataFrame) -> None:
         )
         if not sql_join.equals(pandas_join):
             raise AssertionError("SQL JOIN and pandas merge outputs do not match")
-        output.append("SQL JOIN and pandas.merge are equivalent: True")
+        output.extend([
+            "## JOIN equivalence evidence",
+            "### SQL JOIN output",
+            sql_join.to_string(index=False),
+            "",
+            "### pandas.merge output",
+            pandas_join.to_string(index=False),
+            "",
+            "SQL JOIN and pandas.merge are equivalent: True",
+        ])
     (OUT_DIR / "query_outputs.txt").write_text("\n".join(output), encoding="utf-8")
 
 
